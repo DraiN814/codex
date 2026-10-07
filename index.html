@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#141c19" />
+    <meta name="description" content="Тихолесье — мрачная сказка о брате и сестре." />
+    <title>Тихолесье</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="world" aria-label="Игровое поле"></div>
+      <div class="scene-vignette" aria-hidden="true"></div>
+      <header class="masthead">
+        <a class="wordmark" href="" aria-label="Тихолесье"><i data-lucide="moon-star"></i><span>ТИХОЛЕСЬЕ<small>ПО ТУ СТОРОНУ РАССВЕТА</small></span></a>
+        <div class="location"><span class="live-dot"></span>ЗАБЫТЫЙ ЛЕС<span class="location-divider">/</span><span id="phase-label">УБЕЖИЩЕ</span></div>
+        <nav class="toolbar" aria-label="Настройки игры">
+          <button id="art-button" class="icon-button" aria-label="Эскизы персонажей" data-tooltip="Эскизы персонажей"><i data-lucide="images"></i></button>
+          <button id="sound-button" class="icon-button" aria-label="Включить звук" data-tooltip="Включить звук"><i data-lucide="volume-x"></i></button>
+          <button id="settings-button" class="icon-button" aria-label="Управление" data-tooltip="Управление"><i data-lucide="sliders-horizontal"></i></button>
+          <button id="pause-button" class="icon-button hidden" aria-label="Пауза" data-tooltip="Пауза"><i data-lucide="pause"></i></button>
+        </nav>
+      </header>
+
+      <main id="expedition" class="expedition">
+        <div class="eyebrow"><span></span>ГЛАВА I</div>
+        <h1>Забытый лес</h1>
+        <p class="flavor">У каждого леса есть память.<br />У этого — ещё и долги.</p>
+        <div class="mode-switch" role="group" aria-label="Режим игры">
+          <button class="selected" data-mode="solo" aria-pressed="true"><i data-lucide="user-round"></i>Один</button>
+          <button data-mode="coop" aria-pressed="false"><i data-lucide="users-round"></i>Вдвоём</button>
+        </div>
+        <div class="section-label"><span id="party-label">ВЫБЕРИТЕ ГЕРОЯ</span><span>01 / 02</span></div>
+        <div class="hero-options">
+          <button class="hero-option selected" data-hero="reaper" aria-pressed="true">
+            <span class="hero-portrait reaper-portrait" role="img" aria-label="Брат с чёрными волосами и алым плащом"></span>
+            <span class="hero-description"><strong>Жнец</strong><span>Коса · ближний бой</span></span>
+            <span class="selection-mark"><i data-lucide="check"></i></span>
+          </button>
+          <button class="hero-option" data-hero="necro" aria-pressed="false">
+            <span class="hero-portrait necro-portrait" role="img" aria-label="Некромантка с белыми волосами"></span>
+            <span class="hero-description"><strong>Некромантка</strong><span>Души · дальний бой</span></span>
+            <span class="selection-mark"><i data-lucide="check"></i></span>
+          </button>
+        </div>
+        <div class="expedition-meta"><span><i data-lucide="trees"></i>Бесконечный лес</span><span><i data-lucide="skull"></i>Обычная</span></div>
+        <button id="start-button" class="primary-button"><span>Войти в лес</span><i data-lucide="arrow-right"></i></button>
+        <div class="menu-footer"><span>ДВА ГЕРОЯ. ОДНА СУДЬБА.</span><span>01</span></div>
+      </main>
+
+      <section id="hud" class="hud hidden" aria-label="Состояние забега">
+        <div id="player-panels" class="player-panels"></div>
+        <div class="run-stats"><span><i data-lucide="clock-3"></i><b id="run-time">00:00</b></span><span class="gold-count"><i data-lucide="coins"></i><b id="gold">0</b></span><span id="enemy-count">0</span></div>
+        <div class="bottom-hud"><div id="ability-bars" class="ability-bars"></div><button id="portal-button" class="portal-button" aria-label="Открыть портал"><i data-lucide="door-open"></i><span>В убежище</span><span id="portal-time">3 с</span></button></div>
+        <div id="cast-indicator" class="cast-indicator hidden"><span>ОТКРЫТИЕ ПОРТАЛА</span><div><i id="cast-progress"></i></div></div>
+      </section>
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <div class="forest-caption" id="forest-caption"><span class="caption-rule"></span><span>ТАМ, ГДЕ ЗАТИХАЮТ ГОЛОСА</span></div>
+      <div id="touch-controls" class="touch-controls hidden" aria-label="Сенсорное управление"><div id="joystick"><div></div></div><button id="touch-attack" aria-label="Атака"><i data-lucide="swords"></i></button><button id="touch-dash" aria-label="Рывок"><i data-lucide="wind"></i></button></div>
+    </div>
+    <dialog id="overlay"><div id="dialog-content"></div></dialog>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
