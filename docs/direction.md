@@ -25,7 +25,7 @@ Character study sheet and playable forest combat slice. Verify movement, hero id
 
 ## Next Milestones
 
-1. Review the generated sheet and gameplay atlas, then add consistent directional walk and attack animation assets.
+1. Playtest the articulated hero animation pass: distance-driven steps, front/rear poses, scythe and casting timelines, dash and recovery. Dedicated side-view art and enemy animation are later art passes.
 2. Tune solo and co-op combat, enemy pacing, and ability feedback through playtesting.
 3. Expand the perk pools and add the specified rarity distribution.
 4. Add three save slots, permanent gold, upgrades, export/import, and alternative abilities.

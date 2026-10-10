@@ -110,6 +110,7 @@ try {
   await desktop.keyboard.up('f');
   check(true, 'Necromancer magic bolts hit and defeat enemies');
   await desktop.keyboard.press('q');
+  await tickUntil(desktop, () => window.__mournwood.scene.skeletons.length === 2);
   check(await desktop.evaluate(() => window.__mournwood.scene.skeletons.length === 2), 'Necromancer summons two skeletons');
   await desktop.evaluate(() => { const s = window.__mournwood.scene; s.heroes[0].skill1Left = 0; s.skill(s.heroes[0], 'skill1'); });
   check(await desktop.evaluate(() => window.__mournwood.scene.skeletons.length === 2), 'Summon cap prevents extra skeletons');

@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { createGround, createHeroFrames, preloadArt } from './assets.js';
 import { HEROES, WORLD, normalized, keepPartyVisible, portalStep, availableEnemyTypes, xpNeeded, perkOffer } from './rules.js';
+import { HeroAnimator } from './HeroAnimator.js';
+import { makeAction, advanceAction } from './motion.js';
 
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const clamp = Phaser.Math.Clamp;
@@ -107,14 +109,10 @@ export class ForestScene extends Phaser.Scene {
     const base = HEROES[kind];
     const node = this.physics.add.image(x, y, 'dot').setVisible(false).setCircle(8).setCollideWorldBounds(true);
     const obstacleCollider = this.physics.add.collider(node, this.obstacles);
-    const shadow = this.add.ellipse(0, 0, 45, 18, 0x0b1a16, 0.4);
     const ring = this.add.ellipse(0, 0, 47, 22).setStrokeStyle(1.5, base.color, 0.6);
-    const body = this.add.image(0, -44, `hero-${kind}`);
-    body.setScale(96 / body.height);
-    const weapon = this.add.image(25, -60, kind === 'reaper' ? 'hero-scythe' : 'hero-staff').setOrigin(kind === 'reaper' ? 0.82 : 0.47, 0.55);
-    weapon.setScale(133 / weapon.height);
-    const visual = this.add.container(x, y, [shadow, ring, body, weapon]);
-    const h = { ...base, kind, index, node, visual, bodyArt: body, weapon, ring, maxHp: base.hp, hp: base.hp, facing: { x: 1, y: 0 }, moving: false, walk: 0, attackLeft: 0, dashLeft: 0, dashing: 0, skill1Left: 0, skill2Left: 0, invulnerable: 0, attackAnim: 0, perks: {}, down: false, downTime: 0, revive: 0, colliders: [] };
+    const visual = this.add.container(x, y, [ring]);
+    const animator = new HeroAnimator(this, kind, visual);
+    const h = { ...base, kind, index, node, visual, animator, ring, maxHp: base.hp, hp: base.hp, facing: { x: 1, y: 0 }, moving: false, attackLeft: 0, dashLeft: 0, dashing: 0, skill1Left: 0, skill2Left: 0, invulnerable: 0, action: null, combo: 0, hitReaction: 0, hitStop: 0, ghostLeft: 0, perks: {}, down: false, downTime: 0, revive: 0, colliders: [] };
     h.colliders.push(obstacleCollider, this.physics.add.overlap(node, this.bolts, (_, bolt) => {
       if (bolt.active && bolt.getData('hostile') && !h.down) {
         this.hurtHero(h, 12); bolt.destroy();
@@ -200,26 +198,41 @@ export class ForestScene extends Phaser.Scene {
   }
 
   attack(h) {
-    if (h.attackLeft > 0) return;
-    h.attackLeft = h.attackCooldown; h.attackAnim = 0.3;
-    const dir = this.aim(h), angle = Math.atan2(dir.y, dir.x);
+    if (h.attackLeft > 0 || h.action || h.dashing > 0) return;
+    h.attackLeft = h.attackCooldown;
+    h.action = makeAction(h.kind, 'attack', this.aim(h), h.attackCooldown, h.combo++);
+  }
+
+  releaseAttack(h, action) {
+    const dir = action.direction, angle = Math.atan2(dir.y, dir.x);
     if (h.kind === 'reaper') {
-      this.arc(h.node.x, h.node.y - 12, angle, h.range, 0xe3adb0, false);
+      this.arc(h.node.x, h.node.y - 18, angle, h.range, 0xe3adb0, false);
+      let connected = false;
       for (const e of this.enemies) {
         if (e.dead) continue;
         const d = distance(h.node, e.node), n = normalized(e.node.x - h.node.x, e.node.y - h.node.y);
-        if (d < h.range + e.radius && n.x * dir.x + n.y * dir.y > 0.1) this.hitEnemy(e, h.damage, h);
+        if (d < h.range + e.radius && n.x * dir.x + n.y * dir.y > 0.1) { this.hitEnemy(e, h.damage, h); connected = true; }
       }
+      if (connected) h.hitStop = 0.035;
       this.bridge.sound('scythe');
     } else {
       this.fireBolt(h.node.x + dir.x * 24, h.node.y + dir.y * 24, dir, h.damage, h);
+      const hand = h.animator.handWorld();
+      this.spark(hand.x, hand.y, 0xe0caff, 7);
       this.bridge.sound('bolt');
     }
   }
 
   fireBolt(x, y, dir, damage, owner, hostile = false) {
-    const bolt = this.bolts.create(x, y, 'dot').setTint(hostile ? 0xd3af75 : 0xc6a5f4).setScale(hostile ? 0.45 : 0.55).setDepth(6000);
-    bolt.setData({ damage, owner, hostile, life: hostile ? 2.4 : owner.range / 370 });
+    const bolt = this.bolts.create(x, y, 'dot').setVisible(false).setScale(hostile ? 0.45 : 0.55);
+    const art = this.add.container(x, y - 24).setDepth(6000);
+    const glow = this.add.image(0, 0, 'dot').setTint(hostile ? 0xd3af75 : 0xb998e4).setScale(1.1).setAlpha(0.19);
+    const core = this.add.image(0, 0, 'dot').setTint(hostile ? 0xe4c993 : 0xefe1ff).setScale(0.4);
+    art.add([glow, core]);
+    const hand = owner?.animator.handWorld();
+    if (hand) art.setPosition(hand.x, hand.y);
+    bolt.setData({ damage, owner, hostile, art, startX: hand ? hand.x - x : 0, startY: hand ? hand.y - y : -24, age: 0, life: hostile ? 2.4 : owner.range / 370 });
+    bolt.once('destroy', () => art.destroy());
     bolt.setVelocity(dir.x * (hostile ? 190 : 370), dir.y * (hostile ? 190 : 370));
     bolt.body.setCircle(7);
   }
@@ -227,24 +240,37 @@ export class ForestScene extends Phaser.Scene {
   dash(h) {
     if (h.dashLeft > 0) return;
     h.dashLeft = h.dashCooldown; h.dashing = 0.2; h.invulnerable = 0.32;
+    h.action = null; h.queuedSkill = null; h.ghostLeft = 0;
     h.dashDirection = { ...h.facing }; h.dashHits = new Set();
     this.spark(h.node.x, h.node.y - 15, h.color, 9);
     this.bridge.sound('dash');
   }
 
   skill(h, slot) {
-    if (h[`${slot}Left`] > 0) return;
+    if (h[`${slot}Left`] > 0 || h.dashing > 0) return;
+    if (h.action) { h.queuedSkill = slot; return; }
     const isFirst = slot === 'skill1';
+    const data = {};
+    if (h.kind === 'reaper' && !isFirst) {
+      data.target = this.enemies.filter(e => !e.dead && distance(e.node, h.node) < 145).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+      if (!data.target) { this.bridge.toast('Нет цели в пределах досягаемости'); return; }
+    }
+    if (h.kind === 'necro' && isFirst && this.skeletons.filter(s => s.owner === h).length >= 2) { this.bridge.toast('Оба скелета уже призваны'); return; }
     h[`${slot}Left`] = isFirst ? (h.kind === 'necro' ? 13 : 8) : 11;
-    this.aim(h);
+    const name = h.kind === 'reaper' ? isFirst ? 'spin' : 'execution' : isFirst ? 'summon' : 'bind';
+    const direction = data.target ? normalized(data.target.node.x - h.node.x, data.target.node.y - h.node.y) : this.aim(h);
+    h.action = makeAction(h.kind, name, direction, h.attackCooldown, 0, data);
+  }
+
+  releaseSkill(h, action) {
+    const isFirst = action.name === 'spin' || action.name === 'summon';
     if (h.kind === 'reaper') {
       if (isFirst) {
-        h.attackAnim = 0.55;
         this.arc(h.node.x, h.node.y - 10, 0, 120, 0xe7a4ab, true);
         this.enemies.filter(e => !e.dead && distance(e.node, h.node) < 135).forEach(e => this.hitEnemy(e, h.damage * 1.7, h));
       } else {
-        const target = this.enemies.filter(e => !e.dead && distance(e.node, h.node) < 145).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
-        if (!target) { h.skill2Left = 0; this.bridge.toast('Нет цели в пределах досягаемости'); return; }
+        const target = action.data.target;
+        if (!target || target.dead || !target.node.active || distance(target.node, h.node) > 175) return;
         this.arc(target.node.x, target.node.y, -Math.PI / 2, 47, 0xffd0b4, true);
         this.hitEnemy(target, h.damage * (target.hp / target.maxHp < 0.5 ? 3.2 : 1.3), h);
       }
@@ -258,7 +284,7 @@ export class ForestScene extends Phaser.Scene {
         this.spark(x, y, h.color, 10);
       }
     } else {
-      const x = h.node.x + h.facing.x * 110, y = h.node.y + h.facing.y * 110;
+      const x = h.node.x + action.direction.x * 110, y = h.node.y + action.direction.y * 110;
       const area = this.add.ellipse(x, y, 240, 150, 0xae87d7, 0.12).setStrokeStyle(2, 0xb697db, 0.6).setDepth(1);
       for (const e of this.enemies) if (!e.dead && distance(e.node, { x, y }) < 135) { e.rooted = 4; this.hitEnemy(e, h.damage * 0.4, h); }
       for (let i = 0; i < 12; i++) {
@@ -335,6 +361,7 @@ export class ForestScene extends Phaser.Scene {
   hurtHero(h, amount) {
     if (h.down || h.invulnerable > 0 || !this.running) return;
     h.hp = Math.max(0, h.hp - amount); h.invulnerable = 0.65;
+    h.hitReaction = 1;
     this.spark(h.node.x, h.node.y - 20, 0xee9a8e, 7);
     if (this.portal.active) {
       this.portal = portalStep(this.portal, 0, true);
@@ -344,6 +371,7 @@ export class ForestScene extends Phaser.Scene {
     this.bridge.sound('hurt');
     if (h.hp <= 0) {
       h.down = true; h.downTime = 30; h.node.setVelocity(0);
+      h.action = null; h.queuedSkill = null;
       h.visual.setAlpha(0.45);
       this.bridge.toast(this.heroes.length > 1 ? `${h.name}: 30 секунд до потери души` : 'Лес забрал ещё одну душу');
       if (this.heroes.every(hero => hero.down)) this.finish(false);
@@ -389,6 +417,9 @@ export class ForestScene extends Phaser.Scene {
     this.updatePickups(dt);
     this.bolts.getChildren().slice().forEach(b => {
       const life = b.getData('life') - dt; b.setData('life', life);
+      const age = b.getData('age') + dt; b.setData('age', age);
+      const blend = Math.min(1, age / 0.2);
+      b.getData('art').setPosition(b.x + b.getData('startX') * (1 - blend), b.y + b.getData('startY') * (1 - blend) - 22 * blend);
       if (life <= 0) b.destroy();
     });
     this.spawnLeft -= dt;
@@ -415,7 +446,8 @@ export class ForestScene extends Phaser.Scene {
   }
 
   updateHero(h, dt) {
-    for (const key of ['attackLeft', 'dashLeft', 'skill1Left', 'skill2Left', 'invulnerable', 'attackAnim', 'dashing']) h[key] = Math.max(0, h[key] - dt);
+    for (const key of ['attackLeft', 'dashLeft', 'skill1Left', 'skill2Left', 'invulnerable', 'dashing', 'hitStop', 'ghostLeft']) h[key] = Math.max(0, h[key] - dt);
+    h.hitReaction = Math.max(0, h.hitReaction - dt * 6);
     if (h.down) {
       h.downTime = Math.max(0, h.downTime - dt);
       const ally = this.heroes.find(p => !p.down && p.invulnerable <= 0 && distance(p.node, h.node) < 70 && p.node.body.speed < 10);
@@ -424,6 +456,7 @@ export class ForestScene extends Phaser.Scene {
         h.down = false; h.hp = h.maxHp * 0.2; h.invulnerable = 1; h.revive = 0; h.visual.setAlpha(1);
         this.bridge.toast(`${h.name} возвращается в бой`);
       }
+      this.animateHero(h, dt);
       return;
     }
     const keys = this.inputState.keys, binding = this.bindings[h.index];
@@ -433,28 +466,38 @@ export class ForestScene extends Phaser.Scene {
     const dir = normalized(x, y); h.moving = Boolean(x || y);
     if (h.moving) h.facing = dir;
     if (h.dashing > 0) {
-      h.node.setVelocity(h.dashDirection.x * 620, h.dashDirection.y * 620);
+      const burst = 620 * (0.5 + 0.65 * Math.sin((1 - h.dashing / 0.2) * Math.PI));
+      h.node.setVelocity(h.dashDirection.x * burst, h.dashDirection.y * burst);
+      if (h.ghostLeft <= 0) { h.animator.ghost(h.node.x, h.node.y); h.ghostLeft = 0.065; }
       if (h.kind === 'reaper') for (const e of this.enemies) {
         if (!e.dead && distance(e.node, h.node) < 48 && !h.dashHits.has(e)) { h.dashHits.add(e); this.hitEnemy(e, h.damage * 0.3, h); }
       }
-    } else h.node.setVelocity(dir.x * h.speed, dir.y * h.speed);
+    } else {
+      const recovery = h.action ? 0.82 : 1;
+      h.node.setVelocity(dir.x * h.speed * recovery, dir.y * h.speed * recovery);
+    }
+    if (h.action && h.hitStop <= 0) {
+      const action = h.action;
+      const step = advanceAction(action, dt);
+      if (step.impact) {
+        this.animateHero(h, 0);
+        if (action.name === 'attack') this.releaseAttack(h, action);
+        else this.releaseSkill(h, action);
+      }
+      if (step.complete) h.action = null;
+    }
+    if (!h.action && h.queuedSkill) {
+      const slot = h.queuedSkill; h.queuedSkill = null;
+      this.skill(h, slot);
+    }
     if (keys.has(binding.attack) || (h.index === 0 && this.inputState.touchAttack)) this.attack(h);
     this.animateHero(h, dt);
   }
 
   animateHero(h, dt) {
-    h.walk += dt * (h.moving ? 15 : 2);
     h.visual.setPosition(h.node.x, h.node.y).setDepth(h.node.y + 1);
-    const bob = Math.sin(h.walk) * (h.moving ? 2.4 : 0.7);
-    h.bodyArt.setY(-44 + bob).setRotation(h.moving ? Math.sin(h.walk / 2) * 0.045 : 0);
-    h.bodyArt.setFlipX(h.facing.x < -0.1);
-    const side = h.facing.x < -0.1 ? -1 : 1;
-    h.weapon.setPosition(side * 24, -60 + bob);
-    const grip = h.kind === 'reaper' ? 0.82 : 0.47;
-    h.weapon.setOrigin(side === -1 ? 1 - grip : grip, 0.55);
-    h.weapon.setFlipX(side === -1);
-    h.weapon.setRotation(h.attackAnim > 0 ? side * Math.sin((0.3 - h.attackAnim) / 0.3 * Math.PI) * 1.6 : side * -0.08);
-    h.visual.setAlpha(h.invulnerable > 0 && h.dashing <= 0 ? (Math.floor(h.invulnerable * 18) % 2 ? 0.65 : 1) : 1);
+    h.animator.update(h, h.hitStop > 0 ? 0 : dt);
+    h.visual.setAlpha(h.down ? 0.45 : h.invulnerable > 0 && h.dashing <= 0 ? (Math.floor(h.invulnerable * 18) % 2 ? 0.65 : 1) : 1);
   }
 
   updateCamera(dt) {

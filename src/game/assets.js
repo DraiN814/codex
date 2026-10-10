@@ -1,3 +1,5 @@
+import { PART_NAMES } from './motion.js';
+
 const svg = (width, height, content) => `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${content}</svg>`;
 
 const reaper = svg(80, 100, `
@@ -52,13 +54,15 @@ export const ART = {
 
 export function preloadArt(scene) {
   scene.load.image('hero-atlas', '/assets/hero-atlas.png');
+  scene.load.image('rig-reaper', '/assets/reaper-rig.png');
+  scene.load.image('rig-necro', '/assets/necro-rig.png');
   for (const [key, value] of Object.entries(ART)) {
     scene.load.svg(key, `data:image/svg+xml;base64,${btoa(value)}`);
   }
 }
 
-export function createHeroFrames(scene) {
-  const image = scene.textures.get('hero-atlas').getSourceImage();
+function decodeAtlas(scene, textureKey, classify, limit) {
+  const image = scene.textures.get(textureKey).getSourceImage();
   const canvas = document.createElement('canvas');
   canvas.width = image.width; canvas.height = image.height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -91,11 +95,10 @@ export function createHeroFrames(scene) {
     if (tail > 1000) components.push({ label, count: tail, minX, minY, maxX, maxY });
   }
   const pixels = new Uint32Array(source.data.buffer);
-  for (const part of components.sort((a, b) => b.count - a.count).slice(0, 4)) {
-    const top = (part.minY + part.maxY) / 2 < height / 2;
-    const left = (part.minX + part.maxX) / 2 < width / 2;
-    const name = top ? left ? 'reaper' : 'necro' : left ? 'scythe' : 'staff';
-    const texture = scene.textures.createCanvas(`hero-${name}`, part.maxX - part.minX + 1, part.maxY - part.minY + 1);
+  for (const part of components.sort((a, b) => b.count - a.count).slice(0, limit)) {
+    const name = classify((part.minX + part.maxX) / 2 / width, (part.minY + part.maxY) / 2 / height);
+    if (scene.textures.exists(name)) continue;
+    const texture = scene.textures.createCanvas(name, part.maxX - part.minX + 1, part.maxY - part.minY + 1);
     const output = texture.context.createImageData(texture.width, texture.height);
     const target = new Uint32Array(output.data.buffer);
     for (let y = part.minY; y <= part.maxY; y++) for (let x = part.minX; x <= part.maxX; x++) {
@@ -103,6 +106,14 @@ export function createHeroFrames(scene) {
       if (labels[index] === part.label) target[(y - part.minY) * texture.width + x - part.minX] = pixels[index];
     }
     texture.context.putImageData(output, 0, 0); texture.refresh();
+  }
+}
+
+export function createHeroFrames(scene) {
+  decodeAtlas(scene, 'hero-atlas', (x, y) => `hero-${y < 0.5 ? x < 0.5 ? 'reaper' : 'necro' : x < 0.5 ? 'scythe' : 'staff'}`, 4);
+  for (const kind of ['reaper', 'necro']) {
+    decodeAtlas(scene, `rig-${kind}`, (x, y) => `rig-${kind}-${PART_NAMES[Math.floor(y * 4) * 4 + Math.floor(x * 4)]}`, 16);
+    for (const name of PART_NAMES) if (!scene.textures.exists(`rig-${kind}-${name}`)) throw new Error(`Missing character rig part: ${kind}/${name}`);
   }
 }
 
