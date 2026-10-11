@@ -217,8 +217,8 @@ export class ForestScene extends Phaser.Scene {
       this.bridge.sound('scythe');
     } else {
       this.fireBolt(h.node.x + dir.x * 24, h.node.y + dir.y * 24, dir, h.damage, h);
-      const hand = h.animator.handWorld();
-      this.spark(hand.x, hand.y, 0xe0caff, 7);
+      const emitter = h.animator.emissionWorld();
+      this.spark(emitter.x, emitter.y, 0xe0caff, 7);
       this.bridge.sound('bolt');
     }
   }
@@ -229,9 +229,9 @@ export class ForestScene extends Phaser.Scene {
     const glow = this.add.image(0, 0, 'dot').setTint(hostile ? 0xd3af75 : 0xb998e4).setScale(1.1).setAlpha(0.19);
     const core = this.add.image(0, 0, 'dot').setTint(hostile ? 0xe4c993 : 0xefe1ff).setScale(0.4);
     art.add([glow, core]);
-    const hand = owner?.animator.handWorld();
-    if (hand) art.setPosition(hand.x, hand.y);
-    bolt.setData({ damage, owner, hostile, art, startX: hand ? hand.x - x : 0, startY: hand ? hand.y - y : -24, age: 0, life: hostile ? 2.4 : owner.range / 370 });
+    const emitter = owner?.animator.emissionWorld();
+    if (emitter) art.setPosition(emitter.x, emitter.y);
+    bolt.setData({ damage, owner, hostile, art, startX: emitter ? emitter.x - x : 0, startY: emitter ? emitter.y - y : -24, age: 0, life: hostile ? 2.4 : owner.range / 370 });
     bolt.once('destroy', () => art.destroy());
     bolt.setVelocity(dir.x * (hostile ? 190 : 370), dir.y * (hostile ? 190 : 370));
     bolt.body.setCircle(7);
@@ -480,9 +480,12 @@ export class ForestScene extends Phaser.Scene {
       const action = h.action;
       const step = advanceAction(action, dt);
       if (step.impact) {
+        const elapsed = action.elapsed;
+        action.elapsed = action.impact;
         this.animateHero(h, 0);
         if (action.name === 'attack') this.releaseAttack(h, action);
         else this.releaseSkill(h, action);
+        action.elapsed = elapsed;
       }
       if (step.complete) h.action = null;
     }

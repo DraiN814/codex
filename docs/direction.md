@@ -25,7 +25,7 @@ Character study sheet and playable forest combat slice. Verify movement, hero id
 
 ## Next Milestones
 
-1. Playtest the articulated hero animation pass: distance-driven steps, front/rear poses, scythe and casting timelines, dash and recovery. Dedicated side-view art and enemy animation are later art passes.
+1. Playtest the whole-body painted animation pass: stable idle, distance-driven steps, front/rear poses, scythe and two-handed staff casting, dash and recovery. The separate-limb rig was removed after visual feedback. Dedicated side views, rear dash/down poses, unique ability clips, and enemy animation are later art passes.
 2. Tune solo and co-op combat, enemy pacing, and ability feedback through playtesting.
 3. Expand the perk pools and add the specified rarity distribution.
 4. Add three save slots, permanent gold, upgrades, export/import, and alternative abilities.

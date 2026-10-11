@@ -39,8 +39,8 @@ try {
     s.attack(necro); s.updateHero(necro, necro.action.impact - 0.001);
     check(s.bolts.getLength() === 0, 'Casting windup does not spawn an early projectile');
     s.updateHero(necro, 0.002);
-    const bolt = s.bolts.getChildren()[0], hand = necro.animator.handWorld();
-    check(s.bolts.getLength() === 1 && Math.hypot(bolt.getData('art').x - hand.x, bolt.getData('art').y - hand.y) < 0.01, 'Magic is released from the animated palm');
+    const bolt = s.bolts.getChildren()[0], hand = necro.animator.emissionWorld();
+    check(s.bolts.getLength() === 1 && Math.hypot(bolt.getData('art').x - hand.x, bolt.getData('art').y - hand.y) < 0.01, 'Magic is released from the painted staff head');
     s.skill(necro, 'skill1');
     check(necro.queuedSkill === 'skill1', 'An ability pressed during an attack is buffered');
     s.updateHero(necro, 1);
@@ -52,27 +52,55 @@ try {
     s.updateHero(necro, 1);
     check(s.skeletons.length === 2, 'Summon recovery cannot duplicate skeletons');
 
+    // A slow frame may cross both impact and recovery. Its effect must still
+    // originate at the release painting, not at the recovered staff position.
+    s.bolts.clear(true, true); necro.attackLeft = 0;
+    s.attack(necro);
+    necro.action.elapsed = necro.action.impact;
+    s.animateHero(necro, 0);
+    const release = necro.animator.emissionWorld();
+    necro.action.elapsed = 0;
+    s.updateHero(necro, 2);
+    const lateBolt = s.bolts.getChildren()[0];
+    check(s.bolts.getLength() === 1 && !necro.action && Math.hypot(lateBolt.getData('art').x - release.x, lateBolt.getData('art').y - release.y) < 0.01, 'A slow frame releases once from the impact pose');
+
     for (const h of s.heroes) {
-      check(Object.keys(h.animator.parts).length === 14, `${h.kind} has all fourteen rig parts`);
-      h.action = null; h.hitStop = 0; h.node.setVelocity(h.speed, 0);
-      h.animator.phase = 0.1; h.animator.locomotion = 1; s.animateHero(h, 0);
-      const before = h.animator.parts.bootL.rotation;
-      s.animateHero(h, 0.15);
-      check(Math.abs(before - h.animator.parts.bootL.rotation) > 0.1, `${h.kind} articulates its legs while traveling`);
+      const animator = h.animator;
+      check(animator.root.list.length === 1, `${h.kind} renders as one coherent whole-body painting`);
+      h.action = null; h.hitStop = 0; h.dashing = 0; h.facing = { x: 1, y: 0 };
+      h.node.setVelocity(h.speed, 0);
+      animator.lastPosition = { x: h.node.x, y: h.node.y };
+      animator.distance = 0;
+      const seen = new Set();
+      for (let i = 0; i < 8; i++) {
+        h.node.x += 13.5;
+        s.animateHero(h, 13.5 / h.speed);
+        seen.add(animator.frame);
+        check(animator.sprite.scaleX === animator.sprite.scaleY && animator.sprite.rotation === 0, `${h.kind} frame ${i} preserves painted proportions`);
+      }
+      check(seen.size === 8 && animator.sheet === `${h.kind}-walk`, `${h.kind} plays all eight walk frames over one stride`);
+      const stopped = animator.distance;
+      // Requested velocity is still non-zero, but a collision prevents travel.
+      s.animateHero(h, 0.2);
+      check(animator.distance === stopped && animator.sheet === `${h.kind}-poses`, `${h.kind} does not walk in place against an obstacle`);
       h.node.setVelocity(0); s.animateHero(h, 1);
-      const stopped = h.animator.phase; s.animateHero(h, 0.2);
-      check(stopped === h.animator.phase && h.animator.locomotion < 0.001, `${h.kind} settles out of the walk cycle at rest`);
+      const idle = { key: animator.sprite.texture.key, x: animator.sprite.x, y: animator.sprite.y, scale: animator.sprite.scaleX };
+      s.animateHero(h, 5);
+      check(animator.sprite.texture.key === idle.key && animator.sprite.x === idle.x && animator.sprite.y === idle.y && animator.sprite.scaleX === idle.scale, `${h.kind} has a stable undistorted idle`);
       h.facing = { x: 0, y: -1 }; s.animateHero(h, 0);
-      check(h.animator.parts.head.texture.key.endsWith('headBack'), `${h.kind} uses rear artwork when facing away`);
+      check(animator.sheet === `${h.kind}-poses` && animator.frame === 1, `${h.kind} uses a complete rear pose when facing away`);
       h.facing = { x: -1, y: 0 }; s.animateHero(h, 0);
-      check(h.animator.root.scaleX === -1, `${h.kind} mirrors left-facing poses`);
+      check(animator.root.scaleX === -1, `${h.kind} mirrors left-facing poses`);
+      h.down = true; s.animateHero(h, 0);
+      check(animator.frame === 3 && animator.sheet.endsWith('-poses'), `${h.kind} uses a painted kneeling pose when down`);
+      h.down = false;
     }
     return checks;
   });
   for (const check of checks) console.log(`PASS ${check}`);
 
   // Pose sheets use the same renderer and art as gameplay, at a larger scale
-  // so seams, grips, silhouettes, and timing can be inspected in the output.
+  // so anatomy, grips, silhouettes, and timing can be inspected in the output.
   await page.evaluate(() => {
     document.querySelectorAll('body *').forEach(el => {
       if (el.tagName !== 'CANVAS' && !el.querySelector('canvas')) el.style.visibility = 'hidden';
@@ -101,7 +129,7 @@ try {
           if (sheet === 'movement') {
             h.facing = i < 2 ? { x: 1, y: 0 } : i < 4 ? { x: 0, y: -1 } : { x: -1, y: 0 };
             h.node.setVelocity(h.facing.x * h.speed, h.facing.y * h.speed);
-            h.animator.phase = i % 2 ? 0.66 : 0.16; h.animator.locomotion = 1;
+            h.animator.distance = (i % 2 ? 0.625 : 0) * 108; h.animator.traveling = true;
             caption = `${i < 2 ? 'Right' : i < 4 ? 'Rear' : 'Left'} / ${i % 2 ? 'passing' : 'contact'}`;
           } else {
             const name = sheet === 'attacks' ? 'attack' : kind === 'reaper' ? i < 3 ? 'spin' : 'execution' : i < 3 ? 'summon' : 'bind';

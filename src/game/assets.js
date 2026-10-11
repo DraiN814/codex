@@ -1,4 +1,4 @@
-import { PART_NAMES } from './motion.js';
+import { ANIMATION_ART, frameKey } from './animationArt.js';
 
 const svg = (width, height, content) => `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${content}</svg>`;
 
@@ -53,15 +53,15 @@ export const ART = {
 };
 
 export function preloadArt(scene) {
-  scene.load.image('hero-atlas', '/assets/hero-atlas.png');
-  scene.load.image('rig-reaper', '/assets/reaper-rig.png');
-  scene.load.image('rig-necro', '/assets/necro-rig.png');
+  for (const [sheet, art] of Object.entries(ANIMATION_ART)) {
+    scene.load.image(sheet, art.url);
+  }
   for (const [key, value] of Object.entries(ART)) {
     scene.load.svg(key, `data:image/svg+xml;base64,${btoa(value)}`);
   }
 }
 
-function decodeAtlas(scene, textureKey, classify, limit) {
+function decodeAtlas(scene, textureKey, art) {
   const image = scene.textures.get(textureKey).getSourceImage();
   const canvas = document.createElement('canvas');
   canvas.width = image.width; canvas.height = image.height;
@@ -89,14 +89,18 @@ function decodeAtlas(scene, textureKey, classify, limit) {
       };
       if (x > 0) visit(index - 1);
       if (x < width - 1) visit(index + 1);
-      if (y > 0) visit(index - width);
-      if (y < height - 1) visit(index + width);
+      if (y > 0 && y !== art.splitY) visit(index - width);
+      if (y < height - 1 && y + 1 !== art.splitY) visit(index + width);
     }
     if (tail > 1000) components.push({ label, count: tail, minX, minY, maxX, maxY });
   }
   const pixels = new Uint32Array(source.data.buffer);
-  for (const part of components.sort((a, b) => b.count - a.count).slice(0, limit)) {
-    const name = classify((part.minX + part.maxX) / 2 / width, (part.minY + part.maxY) / 2 / height);
+  for (const part of components.sort((a, b) => b.count - a.count).slice(0, art.anchors.length)) {
+    const column = Math.floor((part.minX + part.maxX) / 2 / width * art.columns);
+    const row = Math.floor((part.minY + part.maxY) / 2 / height * art.rows);
+    const frame = row * art.columns + column;
+    if (art.aliases?.[frame] !== undefined) continue;
+    const name = frameKey(textureKey, frame);
     if (scene.textures.exists(name)) continue;
     const texture = scene.textures.createCanvas(name, part.maxX - part.minX + 1, part.maxY - part.minY + 1);
     const output = texture.context.createImageData(texture.width, texture.height);
@@ -106,14 +110,16 @@ function decodeAtlas(scene, textureKey, classify, limit) {
       if (labels[index] === part.label) target[(y - part.minY) * texture.width + x - part.minX] = pixels[index];
     }
     texture.context.putImageData(output, 0, 0); texture.refresh();
+    texture.customData = { sourceX: part.minX, sourceY: part.minY };
   }
 }
 
 export function createHeroFrames(scene) {
-  decodeAtlas(scene, 'hero-atlas', (x, y) => `hero-${y < 0.5 ? x < 0.5 ? 'reaper' : 'necro' : x < 0.5 ? 'scythe' : 'staff'}`, 4);
-  for (const kind of ['reaper', 'necro']) {
-    decodeAtlas(scene, `rig-${kind}`, (x, y) => `rig-${kind}-${PART_NAMES[Math.floor(y * 4) * 4 + Math.floor(x * 4)]}`, 16);
-    for (const name of PART_NAMES) if (!scene.textures.exists(`rig-${kind}-${name}`)) throw new Error(`Missing character rig part: ${kind}/${name}`);
+  for (const [sheet, art] of Object.entries(ANIMATION_ART)) {
+    decodeAtlas(scene, sheet, art);
+    for (let i = 0; i < art.anchors.length; i++) {
+      if (!scene.textures.exists(frameKey(sheet, art.aliases?.[i] ?? i))) throw new Error(`Missing whole-body frame: ${sheet}/${i}`);
+    }
   }
 }
 

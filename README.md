@@ -31,7 +31,7 @@ npm run test:browser
 npm run test:animation
 ```
 
-The browser checks require the dev server on port 5173 and Chromium at `/usr/bin/chromium` (or set `CHROMIUM_PATH`). Screenshots go to `test-results/`. The animation checks verify damage timing, dash cancellation, casting origins, queued abilities, and directional poses, and capture three enlarged pose sheets for visual review.
+The browser checks require the dev server on port 5173 and Chromium at `/usr/bin/chromium` (or set `CHROMIUM_PATH`). Screenshots go to `test-results/`. The animation checks verify damage timing, dash cancellation, casting origins, queued abilities, stable idle poses, uniform proportions, and stopping at obstacles. They also capture three enlarged pose sheets. `node scripts/capture-animation.mjs` captures a 24 fps motion study using the gameplay renderer; [watch the recorded preview](releases/Animation-preview.mp4?raw=1).
 
 ## Prototype Scope
 
@@ -43,9 +43,9 @@ The browser checks require the dev server on port 5173 and Chromium at `/usr/bin
 - Thirty-second rescue window, three-second uninterrupted proximity revival, 20% restored health.
 - Three-second portal cast interrupted by damage; living co-op players confirm separately.
 - Rebindable keyboard controls, touch controls for solo, optional synthesized combat audio.
-- Generated character study sheet in the gallery, with articulated 2D gameplay characters: separate limbs, torso, head, cloth, hair, and weapons; distance-driven gait, front/rear artwork, and mirrored left-facing poses.
-- Scythe windup, alternating sweeps, recovery, and blade trails; necromancer casting gestures that release magic from the palm. Ability effects occur at their animation events, and ability presses during attacks queue for recovery.
-- Dash crouch and afterimages, cloth/hair follow-through, breathing, damage recoil, and a downed pose.
+- Generated character study sheet in the gallery and whole-body painted gameplay animation. Eight-frame walks follow actual travel, with front/rear artwork and mirrored left-facing poses. Each frame includes the body, hair, clothing, hands, and weapon together.
+- Scythe anticipation, sweep, and recovery; two-handed necromancer casting releases magic from the staff head. Ability effects occur at their animation events, and ability presses during attacks queue for recovery.
+- Stable standing poses, a painted dash with brief afterimages, and a kneeling downed pose. The renderer preserves the paintings' proportions without separately rotating or stretching limbs.
 
 The complete design's three save slots, persistent gold, upgrades, alternative abilities, perk rarity pools, and later biomes are not implemented in this combat prototype. Collected gold is shown in results only; there is no permanent economy yet. Only control bindings persist.
 
@@ -64,6 +64,8 @@ The toolbar sliders open editable bindings. In co-op, the portal confirmation ac
 
 ## Art
 
-`public/assets/character-studies.png` is generated concept art based on the user's supplied character references. `public/assets/hero-atlas.png` supplies the original scythe and skull staff. The generated `reaper-rig.png` and `necro-rig.png` atlases provide the individual body parts used by the 2D rigs; connected alpha regions are decoded into Phaser textures at load time. `src/game/motion.js` defines the gait, joint solving, and action timelines; `HeroAnimator.js` maps them to the painted parts. The characters use front/rear art with mirrored lateral poses, rather than eight separately painted directions. Enemy and summoned-skeleton art remains provisional. These are 2D characters, not 3D models.
+`public/assets/character-studies.png` is generated concept art based on the supplied references. Gameplay uses the complete character paintings in `public/assets/animation/`. Connected alpha regions are decoded into individual textures so long weapons and clothing can extend beyond a grid cell without including a neighbouring character. `animationArt.js` records foot registration, body height, staff emitters, and source-frame aliases. The front casting clip holds its release pose and omits two overlapping source cells.
+
+`motion.js` defines distance-based frame selection and action timelines; `HeroAnimator.js` displays one complete painting with uniform scale. Standing poses are deliberately still. The characters have front/rear views with mirrored lateral poses; dedicated side views, rear dash/down poses, and individual clips for every ability remain future art work. Abilities currently reuse their hero's attack/casting clip with their own timing and effects. Enemy and summoned-skeleton art remains provisional. These are 2D illustrated characters, not 3D models or motion-captured animation.
 
 See `docs/direction.md` for the agreed design decisions and next milestones.
